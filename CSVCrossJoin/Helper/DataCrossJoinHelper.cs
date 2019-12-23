@@ -53,6 +53,10 @@ namespace CSVCrossJoin.Helper
                     }
                 }
             }
+            else
+            {
+                outputColumnsPerPartition = Enumerable.Range(0, sourceDataTable.Columns.Count).ToArray();
+            }
 
             //List<string> partitioningColumns = ;//new List<string>() { "Year" };
 
@@ -111,9 +115,30 @@ namespace CSVCrossJoin.Helper
             {
                 CsvWriter csvWriter = new CsvWriter(writer);
 
-                var outputDataRow = (DataRowView row) =>
+                Action<IEnumerable<string>> outputTableRowFunc = (IEnumerable<string> rowArray) =>
                 {
-                    
+                    int atPos = 0;
+                    var rowEnum = rowArray.GetEnumerator();
+
+                    var at2 = (IEnumerator<int>)outputColumnsPerPartition.GetEnumerator();
+
+                    while (rowEnum.MoveNext())
+                    {
+                        if(atPos == at2.MoveNext())
+                        {
+
+                        }
+                        atPos += 1;
+                    }
+
+                    for (int i = 0; i < outputColumnsPerPartition.Length; i += 1)
+                    {
+                        if(rowEnum.)
+                        if (i == outputColumnsPerPartition[i])
+                        {
+                            csvWriter.WriteField(fields[i]);
+                        }
+                    }
                 };
 
                 // Writes header row for output CSV
@@ -162,10 +187,7 @@ namespace CSVCrossJoin.Helper
                         if (i == minEnumeratorIndex)
                         {
                             //append row data to result row
-                            foreach(string field in ((DataRowView) dataViewsEnumerators[i].Current).Row.ItemArray)
-                            {
-                                csvWriter.WriteField(field);
-                            }
+                            outputTableRowFunc(((DataRowView)dataViewsEnumerators[i].Current).Row);
 
                             //advance enumerator
                             movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
@@ -188,10 +210,7 @@ namespace CSVCrossJoin.Helper
                             if (equal)
                             {
                                 //append row data to result row
-                                foreach (string field in ((DataRowView)dataViewsEnumerators[i].Current).Row.ItemArray)
-                                {
-                                    csvWriter.WriteField(field);
-                                }
+                                outputTableRowFunc(((DataRowView)dataViewsEnumerators[i].Current).Row);
 
                                 //advance enumerator
                                 movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
