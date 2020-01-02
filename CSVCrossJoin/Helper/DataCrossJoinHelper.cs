@@ -36,31 +36,36 @@ namespace CSVCrossJoin.Helper
 
             // The coulmns that will be output for each partition. If key (join) columns are to be
             // included in the output, they should not appear in this array.
-            int[] outputColumnsPerPartition = null;
+            List<int> keyColumnIndexes = new List<int>(keyColumns.Count);
+            List<int> nonKeyColumnIndexes = new List<int>(sourceDataTable.Columns.Count - keyColumns.Count);
+
+            for (int i = 0; i < sourceDataTable.Columns.Count; i += 1)
+            {
+                // Add indexes of all the non-key columns
+                if (keyColumns.Contains(sourceDataTable.Columns[i].ColumnName))
+                {
+                    keyColumnIndexes.Add(i);
+                }
+                else
+                {
+                    nonKeyColumnIndexes.Add(i);
+                }
+            }
+
+            List<int> columnsPerPartitionIndexes = null;
 
             if (putKeyColumnsInFront)
             {
-                outputColumnsPerPartition = new int[sourceDataTable.Columns.Count - keyColumns.Count];
-                int arrPos = 0;
-
-                for (int i = 0; i < sourceDataTable.Columns.Count; i += 1)
-                {
-                    // Add indexes of all the non-key columns
-                    if (!keyColumns.Contains(sourceDataTable.Columns[i].ColumnName))
-                    {
-                        outputColumnsPerPartition[arrPos] = i;
-                        arrPos += 1;
-                    }
-                }
+                columnsPerPartitionIndexes = new List<int>(nonKeyColumnIndexes);
             }
             else
             {
-                outputColumnsPerPartition = Enumerable.Range(0, sourceDataTable.Columns.Count).ToArray();
+                columnsPerPartitionIndexes = new List<int>(Enumerable.Range(0, sourceDataTable.Columns.Count));
             }
 
             //List<string> partitioningColumns = ;//new List<string>() { "Year" };
 
-            DataView sourceDataView = new DataView(sourceDataTable);
+                DataView sourceDataView = new DataView(sourceDataTable);
             DataTable distinctPartitioningValues = sourceDataView.ToTable(true, partitioningColumns.ToArray());
 
             List<DataTable> dataTables = new List<DataTable>();
@@ -115,29 +120,27 @@ namespace CSVCrossJoin.Helper
             {
                 CsvWriter csvWriter = new CsvWriter(writer);
 
-                Action<IEnumerable<string>> outputTableRowFunc = (IEnumerable<string> rowArray) =>
+                Action<IEnumerable<string>, IEnumerable<int>> outputTableRowFields = (IEnumerable<string> rowArray, IEnumerable<int> columnIndexes) =>
                 {
-                    int atPos = 0;
-                    var rowEnum = rowArray.GetEnumerator();
+                    var it = rowArray.GetEnumerator();
+                    int itPos = 0;
 
-                    var at2 = (IEnumerator<int>)outputColumnsPerPartition.GetEnumerator();
+                    var at = columnIndexes.GetEnumerator();
 
-                    while (rowEnum.MoveNext())
+                    if (!at.MoveNext())
                     {
-                        if(atPos == at2.MoveNext())
-                        {
-
-                        }
-                        atPos += 1;
+                        return;
                     }
 
-                    for (int i = 0; i < outputColumnsPerPartition.Length; i += 1)
+                    while (it.MoveNext())
                     {
-                        if(rowEnum.)
-                        if (i == outputColumnsPerPartition[i])
+                        if (itPos == at.Current)
                         {
-                            csvWriter.WriteField(fields[i]);
+                            csvWriter.WriteField(it.Current);
+                            at.MoveNext();
                         }
+
+                        itPos += 1;
                     }
                 };
 
@@ -187,7 +190,7 @@ namespace CSVCrossJoin.Helper
                         if (i == minEnumeratorIndex)
                         {
                             //append row data to result row
-                            outputTableRowFunc(((DataRowView)dataViewsEnumerators[i].Current).Row);
+                            outputTableRowFields(((DataRowView)dataViewsEnumerators[i].Current).Row, columnsPerPartitionIndexes);
 
                             //advance enumerator
                             movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
