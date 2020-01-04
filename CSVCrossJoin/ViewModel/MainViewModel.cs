@@ -39,7 +39,12 @@ namespace CSVCrossJoin.ViewModel
         public ObservableCollection<SelectableItem<string>> PartitioningColumns { get; }
         public ObservableCollection<SelectableItem<string>> JoinColumns { get; }
 
-        public bool TaskInProgress { get; private set; } = false;
+        private bool taskInProgress = false;
+        public bool TaskInProgress
+        {
+            get => taskInProgress;
+            private set => SetProperty(ref taskInProgress, value);
+        }
 
         private bool _isOpenFileCommandRunning = false;
         private RelayCommand openFileCommand;
@@ -149,6 +154,7 @@ namespace CSVCrossJoin.ViewModel
                         try
                         {
                             TaskInProgress = true;
+                            
                             var partitioningColumns = PartitioningColumns.Where(col => col.IsSelected)
                                 .Select(col => col.ItemValue).ToList();
                             var joinColumns = JoinColumns.Where(col => col.IsSelected)
@@ -156,9 +162,7 @@ namespace CSVCrossJoin.ViewModel
 
                             //TODO: Check input file path, check if column selection is acceptable
 
-                            await Task.Run(() =>
-                                DataCrossJoinHelper.PerformJoin(InputFilePath, partitioningColumns, joinColumns, true)
-                                );
+                            await Task.Run(() => DataCrossJoinHelper.PerformJoin(InputFilePath, partitioningColumns, joinColumns, true));
                         }
                         finally
                         {
