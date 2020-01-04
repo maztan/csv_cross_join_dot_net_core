@@ -144,14 +144,25 @@ namespace CSVCrossJoin.Helper
                     }
                 };
 
-                // Writes header row for output CSV
-                foreach (var dataView in dataViews)
+                List<string> columnNames = new List<string>(sourceDataTable.Columns.Count);
+
+                foreach (DataColumn col in sourceDataTable.Columns)
                 {
-                    foreach(DataColumn col in dataView.Table.Columns)
-                    {
-                        csvWriter.WriteField(col.ColumnName);
-                    }
+                    columnNames.Add(col.ColumnName);
                 }
+
+                if (putKeyColumnsInFront)
+                {
+                    outputTableRowFields(columnNames, keyColumnIndexes);
+                }
+
+                // Writes header row for output CSV
+                for (int i = 0; i < dataViews.Count; i += 1)
+                {
+                    outputTableRowFields(columnNames, columnsPerPartitionIndexes);
+                }
+
+                //csvWriter.WriteField(col.ColumnName);
 
                 csvWriter.NextRecord();
 
@@ -160,13 +171,22 @@ namespace CSVCrossJoin.Helper
                 while (movedNext)
                 {
                     movedNext = false;
+
                     minKeyColumnVals = null;
 
                     // Look for "minimum" key column combination
                     for (int i = 0; i < dataViewsEnumerators.Count; i += 1)
                     {
                         //FIXME: THIS CAN THROW IF MoveNext moved the Current past the last element.
-                        DataRowView row = (DataRowView)dataViewsEnumerators[i].Current;
+                        DataRowView row = null;
+                        try
+                        {
+                            row = (DataRowView)dataViewsEnumerators[i].Current;
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            continue;
+                        }
 
                         // Compare the row's key columns with local minimum
                         for (int j = 0; j < keyColumns.Count; j += 1)
@@ -181,16 +201,36 @@ namespace CSVCrossJoin.Helper
                         }
                     }
 
+                    // Write out the "minimum" key column combination first if key columns are to be put in front
+                    if (putKeyColumnsInFront)
+                    {
+                        foreach(string fieldVal in minKeyColumnVals)
+                        {
+                            csvWriter.WriteField(fieldVal);
+                        }
+                    }
+
                     // Write all the rows with key colums equal to the found min values
                     for (int i = 0; i < dataViewsEnumerators.Count; i += 1)
                     {
-                        DataRowView row = (DataRowView)dataViewsEnumerators[i].Current;
+                        //Get the row that the current enumerator points to
+                        DataRowView rowView = null;
+                        try
+                        {
+                            rowView = (DataRowView)dataViewsEnumerators[i].Current;
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            continue;
+                        }
 
-                        // If we are at the index of the enumerator set to minimum entry, no need to compare
-                        if (i == minEnumeratorIndex)
+                    // Since key columns have the same values 
+
+                    // If we are at the index of the enumerator set to minimum entry, no need to compare
+                    if (i == minEnumeratorIndex)
                         {
                             //append row data to result row
-                            outputTableRowFields(((DataRowView)dataViewsEnumerators[i].Current).Row, columnsPerPartitionIndexes);
+                            outputTableRowFields(rowView.Row.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
 
                             //advance enumerator
                             movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
@@ -202,7 +242,7 @@ namespace CSVCrossJoin.Helper
                             for (int j = 0; j < keyColumns.Count; j += 1)
                             {
                                 //NOTE: This assumes DataTable will sort the rows using the same method
-                                if (row[keyColumns[j]].ToString().CompareTo(minKeyColumnVals[j]) != 0)
+                                if (rowView[keyColumns[j]].ToString().CompareTo(minKeyColumnVals[j]) != 0)
                                 {
                                     //found value that is not equal;
                                     equal = false;
@@ -213,15 +253,14 @@ namespace CSVCrossJoin.Helper
                             if (equal)
                             {
                                 //append row data to result row
-                                outputTableRowFunc(((DataRowView)dataViewsEnumerators[i].Current).Row);
+                                outputTableRowFields(rowView.Row.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
 
                                 //advance enumerator
                                 movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
                             }
                             else
                             {
-                                // Append number of empty fields equal to the number of columns in corresponding input data table
-                                for (int k = 0; k < dataTables[i].Columns.Count; k += 1)
+                                for (int k = 0; k < columnsPerPartitionIndexes.Count; k += 1)
                                 {
                                     csvWriter.WriteField("");
                                 }
@@ -234,6 +273,8 @@ namespace CSVCrossJoin.Helper
                         csvWriter.NextRecord();
                     }
                 }
+
+                csvWriter.Flush();
             }
         }
     }

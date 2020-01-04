@@ -15,14 +15,13 @@ namespace CSVCrossJoin.ViewModel
         {
             PartitioningColumns = new ObservableCollection<SelectableItem<string>>();
             JoinColumns = new ObservableCollection<SelectableItem<string>>();
-            OutputColumns = new ObservableCollection<SelectableItem<string>>();
 
             openCsvFileDialog = new Microsoft.Win32.OpenFileDialog();
             openCsvFileDialog.Filter = "CSV Files|*.csv";
 
             /*AddDUMMY(PartitioningColumns);
             AddDUMMY(JoinColumns);
-            AddDUMMY(OutputColumns);*/
+            */
         }
 
         /*private void AddDUMMY(ICollection<SelectableItem<string>> collection)
@@ -40,7 +39,7 @@ namespace CSVCrossJoin.ViewModel
         public ObservableCollection<SelectableItem<string>> PartitioningColumns { get; }
         public ObservableCollection<SelectableItem<string>> JoinColumns { get; }
 
-        public ObservableCollection<SelectableItem<string>> OutputColumns { get; }
+        public bool TaskInProgress { get; private set; } = false;
 
         private bool _isOpenFileCommandRunning = false;
         private RelayCommand openFileCommand;
@@ -63,26 +62,33 @@ namespace CSVCrossJoin.ViewModel
 
                         if (openCsvFileDialog.ShowDialog(/*main window ref here*/) == true)
                         {
-                            string csvFilePath = openCsvFileDialog.FileName;
-
-                            //await Task.Run(() =>
-                            //{
-                            IList<string> columnNames = await Task.Run(() =>
-                                    DataCrossJoinHelper.GetColumnNamesFromCSV(csvFilePath)
-                                );
-
-                            PartitioningColumns.Clear();
-                            JoinColumns.Clear();
-                            OutputColumns.Clear();
-
-                            foreach (string columnName in columnNames)
+                            try
                             {
-                                PartitioningColumns.AddRawString(columnName);
-                                JoinColumns.AddRawString(columnName);
-                                OutputColumns.AddRawString(columnName, true);
-                            }
+                                TaskInProgress = true;
 
-                            InputFilePath = csvFilePath;
+                                string csvFilePath = openCsvFileDialog.FileName;
+
+                                //await Task.Run(() =>
+                                //{
+                                IList<string> columnNames = await Task.Run(() =>
+                                        DataCrossJoinHelper.GetColumnNamesFromCSV(csvFilePath)
+                                    );
+
+                                PartitioningColumns.Clear();
+                                JoinColumns.Clear();
+
+                                foreach (string columnName in columnNames)
+                                {
+                                    PartitioningColumns.AddRawString(columnName);
+                                    JoinColumns.AddRawString(columnName);
+                                }
+
+                                InputFilePath = csvFilePath;
+                            }
+                            finally
+                            {
+                                TaskInProgress = false;
+                            }
                             //});
                         }
 
@@ -132,22 +138,32 @@ namespace CSVCrossJoin.ViewModel
                   ?? (performJoinCommand = new RelayCommand(
                     async () =>
                     {
-                        if (_isPerformJoinCommandRunning)
+                    if (_isPerformJoinCommandRunning)
+                    {
+                        return;
+                    }
+
+                    _isPerformJoinCommandRunning = true;
+                    performJoinCommand.RaiseCanExecuteChanged();
+
+                        try
                         {
-                            return;
+                            TaskInProgress = true;
+                            var partitioningColumns = PartitioningColumns.Where(col => col.IsSelected)
+                                .Select(col => col.ItemValue).ToList();
+                            var joinColumns = JoinColumns.Where(col => col.IsSelected)
+                                .Select(col => col.ItemValue).ToList();
+
+                            //TODO: Check input file path, check if column selection is acceptable
+
+                            await Task.Run(() =>
+                                DataCrossJoinHelper.PerformJoin(InputFilePath, partitioningColumns, joinColumns, true)
+                                );
                         }
-
-                        _isPerformJoinCommandRunning = true;
-                        performJoinCommand.RaiseCanExecuteChanged();
-
-                        var partitioningColumns = PartitioningColumns.Where(col => col.IsSelected)
-                            .Select(col => col.ItemValue).ToList();
-                        var joinColumns = JoinColumns.Where(col => col.IsSelected)
-                            .Select(col => col.ItemValue).ToList();
-
-                        //TODO: Check input file path, check if column selection is acceptable
-
-                        DataCrossJoinHelper.PerformJoin(InputFilePath, partitioningColumns, joinColumns);
+                        finally
+                        {
+                            TaskInProgress = false;
+                        }
 
                         _isPerformJoinCommandRunning = false;
                         performJoinCommand.RaiseCanExecuteChanged();
