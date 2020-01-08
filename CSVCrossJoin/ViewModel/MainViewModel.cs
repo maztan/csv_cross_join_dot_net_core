@@ -1,13 +1,14 @@
-﻿using CSVCrossJoin.Helper;
+﻿using DataCrossJoin.Helper;
 using GalaSoft.MvvmLight.Command;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CSVCrossJoin.ViewModel
+namespace DataCrossJoin.ViewModel
 {
     public class MainViewModel : NotifyPropertyChangedImplBase
     {
@@ -35,6 +36,7 @@ namespace CSVCrossJoin.ViewModel
         private Microsoft.Win32.OpenFileDialog openCsvFileDialog;
 
         public string InputFilePath { get; private set; }
+        private DataTable InputDataTable { get; set; }
 
         public ObservableCollection<SelectableItem<string>> PartitioningColumns { get; }
         public ObservableCollection<SelectableItem<string>> JoinColumns { get; }
@@ -75,20 +77,19 @@ namespace CSVCrossJoin.ViewModel
 
                                 //await Task.Run(() =>
                                 //{
-                                IList<string> columnNames = await Task.Run(() =>
-                                        DataCrossJoinHelper.GetColumnNamesFromCSV(csvFilePath)
-                                    );
+                                DataTable dataTable = await Task.Run(() => DataCrossJoinHelper.LoadCSVtoDataTable(csvFilePath));
 
                                 PartitioningColumns.Clear();
                                 JoinColumns.Clear();
 
-                                foreach (string columnName in columnNames)
+                                foreach (string columnName in dataTable.Columns.GetColumnNames())
                                 {
                                     PartitioningColumns.AddRawString(columnName);
                                     JoinColumns.AddRawString(columnName);
                                 }
 
                                 InputFilePath = csvFilePath;
+                                InputDataTable = dataTable;
                             }
                             finally
                             {
@@ -153,16 +154,24 @@ namespace CSVCrossJoin.ViewModel
 
                         try
                         {
-                            TaskInProgress = true;
-                            
-                            var partitioningColumns = PartitioningColumns.Where(col => col.IsSelected)
-                                .Select(col => col.ItemValue).ToList();
-                            var joinColumns = JoinColumns.Where(col => col.IsSelected)
-                                .Select(col => col.ItemValue).ToList();
+                            if (InputDataTable == null)
+                            {
+                                System.Windows.MessageBox.Show("No input file open.", "Cannot perform operation",
+                                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                            }
+                            else
+                            {
+                                TaskInProgress = true;
 
-                            //TODO: Check input file path, check if column selection is acceptable
+                                var partitioningColumns = PartitioningColumns.Where(col => col.IsSelected)
+                                    .Select(col => col.ItemValue).ToList();
+                                var joinColumns = JoinColumns.Where(col => col.IsSelected)
+                                    .Select(col => col.ItemValue).ToList();
 
-                            await Task.Run(() => DataCrossJoinHelper.PerformJoin(InputFilePath, partitioningColumns, joinColumns, true));
+                                //TODO: Check input file path, check if column selection is acceptable
+
+                                await Task.Run(() => DataCrossJoinHelper.PerformJoin(InputDataTable, partitioningColumns, joinColumns, true));
+                            }
                         }
                         finally
                         {

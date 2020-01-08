@@ -1,8 +1,8 @@
-﻿<Application x:Class="CSVCrossJoin.App"
+﻿<Application x:Class="DataCrossJoin.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:CSVCrossJoin"
-             xmlns:vm="clr-namespace:CSVCrossJoin.ViewModel"
+             xmlns:local="clr-namespace:DataCrossJoin"
+             xmlns:vm="clr-namespace:DataCrossJoin.ViewModel"
              StartupUri="View/MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>

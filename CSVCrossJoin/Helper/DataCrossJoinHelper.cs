@@ -5,16 +5,27 @@ using System.Text;
 using System.Linq;
 using System.IO;
 using CsvHelper;
+using CsvHelper.Configuration;
 
-namespace CSVCrossJoin.Helper
+namespace DataCrossJoin.Helper
 {
     public class DataCrossJoinHelper
     {
-        public static IList<string> GetColumnNamesFromCSV(string csvFilePath)
+        private const char csvColumnDelimiter = ',';
+        private static Configuration CreateCsvConfiguration()
+        {
+            var config = new Configuration();
+            config.Delimiter = csvColumnDelimiter.ToString();
+            return config;
+        }
+
+        #region handling csv input
+
+        /*public static IList<string> GetColumnNamesFromCSV(string csvFilePath)
         {  
-            using (var reader = new StreamReader(csvFilePath))
+            using (var reader = new StreamReader(csvFilePath, Encoding.UTF8))
             {
-                using (var csv = new CsvReader(reader))
+                using (var csv = new CsvReader(reader, CreateCsvConfiguration()))
                 {
                     csv.Read();
                     csv.ReadHeader();
@@ -23,16 +34,23 @@ namespace CSVCrossJoin.Helper
                     return headerRow;
                 }
             }
-        }
+        }*/
 
-        public static void PerformJoin(string csvFilePath, IList<string> partitioningColumns, IList<string> keyColumns, bool putKeyColumnsInFront = false)
+        public static DataTable LoadCSVtoDataTable(string csvFilePath)
         {
-            //!TODO: check if passed columns are in the csv file. If they are not there will be problems.
-
-            var adapter = new GenericParsing.GenericParserAdapter(csvFilePath);
+            var adapter = new GenericParsing.GenericParserAdapter(csvFilePath, Encoding.UTF8);
             adapter.FirstRowHasHeader = true;
+            adapter.ColumnDelimiter = csvColumnDelimiter;
 
             DataTable sourceDataTable = adapter.GetDataTable();
+            return sourceDataTable;
+        }
+
+        #endregion
+
+        public static void PerformJoin(DataTable sourceDataTable, IList<string> partitioningColumns, IList<string> keyColumns, bool putKeyColumnsInFront = false)
+        {
+            //!TODO: check if passed columns are in the csv file. If they are not there will be problems.
 
             // The coulmns that will be output for each partition. If key (join) columns are to be
             // included in the output, they should not appear in this array.
@@ -88,10 +106,6 @@ namespace CSVCrossJoin.Helper
                 DataTable dt = sourceDataTable.Select(sb.ToString()).CopyToDataTable();
                 dataTables.Add(dt);
             }
-
-            // Source data table is no longer useful
-            sourceDataTable.Clear();
-
 
             //List<string> keyColumns = new List<string>() { "col1", "col2", "col3" };
 
@@ -166,91 +180,72 @@ namespace CSVCrossJoin.Helper
 
                 csvWriter.NextRecord();
 
-                bool movedNext = true;
-
-                while (movedNext)
+                // The rest of the code depends on source data table containg some data rows (output column header was handled above)
+                if (sourceDataTable.Rows.Count != 0)
                 {
-                    movedNext = false;
 
-                    minKeyColumnVals = null;
+                    bool movedNext = true;
 
-                    // Look for "minimum" key column combination
-                    for (int i = 0; i < dataViewsEnumerators.Count; i += 1)
+                    while (movedNext)
                     {
-                        //FIXME: THIS CAN THROW IF MoveNext moved the Current past the last element.
-                        DataRowView row = null;
-                        try
-                        {
-                            row = (DataRowView)dataViewsEnumerators[i].Current;
-                        }
-                        catch (InvalidOperationException)
-                        {
-                            continue;
-                        }
+                        movedNext = false;
 
-                        // Compare the row's key columns with local minimum
-                        for (int j = 0; j < keyColumns.Count; j += 1)
+                        minKeyColumnVals = null;
+
+                        // Look for "minimum" key column combination
+                        for (int i = 0; i < dataViewsEnumerators.Count; i += 1)
                         {
-                            //NOTE: This assumes DataTable will sort the rows using the same method
-                            if (minKeyColumnVals == null || row[keyColumns[j]].ToString().CompareTo(minKeyColumnVals[j]) == -1)
+                            //FIXME: THIS CAN THROW IF MoveNext moved the Current past the last element.
+                            DataRowView row = null;
+                            try
                             {
-                                minKeyColumnVals = keyColumns.Select(keyColumn => row[keyColumn].ToString()).ToList();
-                                minEnumeratorIndex = i;
-                                break;
+                                row = (DataRowView)dataViewsEnumerators[i].Current;
                             }
-                        }
-                    }
+                            catch (InvalidOperationException)
+                            {
+                                continue;
+                            }
 
-                    // Write out the "minimum" key column combination first if key columns are to be put in front
-                    if (putKeyColumnsInFront)
-                    {
-                        foreach(string fieldVal in minKeyColumnVals)
-                        {
-                            csvWriter.WriteField(fieldVal);
-                        }
-                    }
-
-                    // Write all the rows with key colums equal to the found min values
-                    for (int i = 0; i < dataViewsEnumerators.Count; i += 1)
-                    {
-                        //Get the row that the current enumerator points to
-                        DataRowView rowView = null;
-                        try
-                        {
-                            rowView = (DataRowView)dataViewsEnumerators[i].Current;
-                        }
-                        catch (InvalidOperationException)
-                        {
-                            continue;
-                        }
-
-                    // Since key columns have the same values 
-
-                    // If we are at the index of the enumerator set to minimum entry, no need to compare
-                    if (i == minEnumeratorIndex)
-                        {
-                            //append row data to result row
-                            outputTableRowFields(rowView.Row.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
-
-                            //advance enumerator
-                            movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
-                        }
-                        else
-                        {
-                            bool equal = true;
-                            // Compare the row's key columns with minimum values
+                            // Compare the row's key columns with local minimum
                             for (int j = 0; j < keyColumns.Count; j += 1)
                             {
                                 //NOTE: This assumes DataTable will sort the rows using the same method
-                                if (rowView[keyColumns[j]].ToString().CompareTo(minKeyColumnVals[j]) != 0)
+                                if (minKeyColumnVals == null || row[keyColumns[j]].ToString().CompareTo(minKeyColumnVals[j]) == -1)
                                 {
-                                    //found value that is not equal;
-                                    equal = false;
+                                    minKeyColumnVals = keyColumns.Select(keyColumn => row[keyColumn].ToString()).ToList();
+                                    minEnumeratorIndex = i;
                                     break;
                                 }
                             }
+                        }
 
-                            if (equal)
+                        // Write out the "minimum" key column combination first if key columns are to be put in front
+                        if (putKeyColumnsInFront)
+                        {
+                            foreach (string fieldVal in minKeyColumnVals)
+                            {
+                                csvWriter.WriteField(fieldVal);
+                            }
+                        }
+
+                        // Write all the rows with key colums equal to the found min values
+                        for (int i = 0; i < dataViewsEnumerators.Count; i += 1)
+                        {
+                            //Get the row that the current enumerator points to
+                            DataRowView rowView = null;
+                            try
+                            {
+                                rowView = (DataRowView)dataViewsEnumerators[i].Current;
+                            }
+                            catch (InvalidOperationException)
+                            {
+                                continue;
+                            }
+
+                            // Since key columns have the same values 
+
+                            // If we are at the index of the enumerator set to minimum entry, no need to compare
+                            if (i == minEnumeratorIndex)
                             {
                                 //append row data to result row
                                 outputTableRowFields(rowView.Row.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
@@ -260,17 +255,41 @@ namespace CSVCrossJoin.Helper
                             }
                             else
                             {
-                                for (int k = 0; k < columnsPerPartitionIndexes.Count; k += 1)
+                                bool equal = true;
+                                // Compare the row's key columns with minimum values
+                                for (int j = 0; j < keyColumns.Count; j += 1)
                                 {
-                                    csvWriter.WriteField("");
+                                    //NOTE: This assumes DataTable will sort the rows using the same method
+                                    if (rowView[keyColumns[j]].ToString().CompareTo(minKeyColumnVals[j]) != 0)
+                                    {
+                                        //found value that is not equal;
+                                        equal = false;
+                                        break;
+                                    }
+                                }
+
+                                if (equal)
+                                {
+                                    //append row data to result row
+                                    outputTableRowFields(rowView.Row.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
+
+                                    //advance enumerator
+                                    movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
+                                }
+                                else
+                                {
+                                    for (int k = 0; k < columnsPerPartitionIndexes.Count; k += 1)
+                                    {
+                                        csvWriter.WriteField("");
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if (movedNext)
-                    {
-                        csvWriter.NextRecord();
+                        if (movedNext)
+                        {
+                            csvWriter.NextRecord();
+                        }
                     }
                 }
 

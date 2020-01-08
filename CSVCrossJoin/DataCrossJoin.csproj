@@ -19,6 +19,7 @@
     <PackageReference Include="CommonServiceLocator" Version="2.0.5" />
     <PackageReference Include="CsvHelper" Version="12.2.3" />
     <PackageReference Include="GenericParser" Version="1.1.6" />
+    <PackageReference Include="Independentsoft.Office.Odf" Version="2.0.580" />
     <PackageReference Include="MvvmLightLibs" Version="5.4.1.1" />
   </ItemGroup>
 

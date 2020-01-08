@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace CSVCrossJoin.ViewModel
+namespace DataCrossJoin.ViewModel
 {
     public static class SelectableItemCollectionEx
     {

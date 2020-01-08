@@ -1,8 +1,8 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:local="clr-namespace:CSVCrossJoin.Resources"
+                    xmlns:local="clr-namespace:DataCrossJoin.Resources"
                     xmlns:system="clr-namespace:System;assembly=mscorlib">
-    <system:String x:Key="appTitle">CSV file full outer join</system:String>
+    <system:String x:Key="appTitle">Tabular data file partitioning and full outer join</system:String>
     <system:String x:Key="fileMenuTitle">File</system:String>
     <system:String x:Key="actionsMenuTitle">Actions</system:String>
     <system:String x:Key="fileOpenMenuText">Open</system:String>

@@ -16,7 +16,7 @@ using CommonServiceLocator;
 using GalaSoft.MvvmLight.Ioc;
 // using Microsoft.Practices.ServiceLocation;
 
-namespace CSVCrossJoin.ViewModel
+namespace DataCrossJoin.ViewModel
 {
     /// <summary>
     /// This class contains static references to all the view models in the
