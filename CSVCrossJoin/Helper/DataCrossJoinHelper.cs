@@ -83,7 +83,14 @@ namespace DataCrossJoin.Helper
 
             //List<string> partitioningColumns = ;//new List<string>() { "Year" };
 
-                DataView sourceDataView = new DataView(sourceDataTable);
+            // Sort by key columns ascending (algorithm depends on it)
+            string sortFilterStr = string.Join(',', keyColumns.Select(c => $"[{c}] ASC"));
+            var tmpView = sourceDataTable.DefaultView;
+            tmpView.Sort = sortFilterStr;
+            sourceDataTable = tmpView.ToTable();
+
+            DataView sourceDataView = new DataView(sourceDataTable);
+
             DataTable distinctPartitioningValues = sourceDataView.ToTable(true, partitioningColumns.ToArray());
 
             List<DataTable> dataTables = new List<DataTable>();
@@ -104,9 +111,10 @@ namespace DataCrossJoin.Helper
                 }
 
                 DataTable dt = sourceDataTable.Select(sb.ToString()).CopyToDataTable();
+
                 dataTables.Add(dt);
             }
-
+            var en = dataTables[0].AsEnumerable().GetEnumerator();
             //List<string> keyColumns = new List<string>() { "col1", "col2", "col3" };
 
             List<DataView> dataViews = new List<DataView>();
@@ -120,7 +128,7 @@ namespace DataCrossJoin.Helper
             }
 
             List<System.Collections.IEnumerator> dataViewsEnumerators = dataViews.Select(dv => dv.GetEnumerator()).ToList();
-
+            
             List<string> minKeyColumnVals = null;
             int minEnumeratorIndex = -1;
 
@@ -190,8 +198,6 @@ namespace DataCrossJoin.Helper
                     {
                         movedNext = false;
 
-                        minKeyColumnVals = null;
-
                         // Look for "minimum" key column combination
                         for (int i = 0; i < dataViewsEnumerators.Count; i += 1)
                         {
@@ -200,6 +206,16 @@ namespace DataCrossJoin.Helper
                             try
                             {
                                 row = (DataRowView)dataViewsEnumerators[i].Current;
+
+                                if (row["Kod stanowiska"].ToString() == "MpKrakBujaka-PM10-1g")
+                                {
+                                    string a = "abc";
+
+                                    for (int j = 0; j < dataViews.Count; j += 1)
+                                    {
+                                           var row1 = dataViews[j].Table.Select("[Kod stanowiska] = 'MpKrakBujaka-PM10-1g'");
+                                    }
+                                }
                             }
                             catch (InvalidOperationException)
                             {
@@ -272,6 +288,7 @@ namespace DataCrossJoin.Helper
                                 {
                                     //append row data to result row
                                     outputTableRowFields(rowView.Row.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
+
 
                                     //advance enumerator
                                     movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
