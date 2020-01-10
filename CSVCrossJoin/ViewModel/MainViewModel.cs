@@ -170,7 +170,7 @@ namespace DataCrossJoin.ViewModel
 
                                 //TODO: Check input file path, check if column selection is acceptable
 
-                                await Task.Run(() => DataCrossJoinHelper.PerformJoin(InputDataTable, partitioningColumns, joinColumns, true));
+                                await Task.Run(async () => await DataCrossJoinHelper.PerformJoinAsync(InputDataTable, partitioningColumns, joinColumns, true));
                             }
                         }
                         finally

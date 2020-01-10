@@ -48,8 +48,33 @@ namespace DataCrossJoin.Helper
 
         #endregion
 
-        public static void PerformJoin(DataTable sourceDataTable, IList<string> partitioningColumns, IList<string> keyColumns, bool putKeyColumnsInFront = false)
+        public static async System.Threading.Tasks.Task PerformJoinAsync(DataTable sourceDataTable, IList<string> partitioningColumns, IList<string> keyColumns, bool putKeyColumnsInFront = false)
         {
+            Action<CsvWriter, IEnumerable<string>, IEnumerable<int>> outputTableRowFields =
+                (CsvWriter csvWriter ,IEnumerable<string> rowArray, IEnumerable<int> columnIndexes) =>
+            {
+                var it = rowArray.GetEnumerator();
+                int itPos = 0;
+
+                var at = columnIndexes.GetEnumerator();
+
+                if (!at.MoveNext())
+                {
+                    return;
+                }
+
+                while (it.MoveNext())
+                {
+                    if (itPos == at.Current)
+                    {
+                        csvWriter.WriteField(it.Current);
+                        at.MoveNext();
+                    }
+
+                    itPos += 1;
+                }
+            };
+
             //!TODO: check if passed columns are in the csv file. If they are not there will be problems.
 
             // The coulmns that will be output for each partition. If key (join) columns are to be
@@ -84,14 +109,15 @@ namespace DataCrossJoin.Helper
             //List<string> partitioningColumns = ;//new List<string>() { "Year" };
 
             // Sort by key columns ascending (algorithm depends on it)
-            string sortFilterStr = string.Join(',', keyColumns.Select(c => $"[{c}] ASC"));
+            /*string sortFilterStr = string.Join(',', keyColumns.Select(c => $"[{c}] ASC"));
             var tmpView = sourceDataTable.DefaultView;
             tmpView.Sort = sortFilterStr;
-            sourceDataTable = tmpView.ToTable();
+            sourceDataTable = tmpView.ToTable();*/
 
-            DataView sourceDataView = new DataView(sourceDataTable);
+             DataView sourceDataView = new DataView(sourceDataTable);
 
             DataTable distinctPartitioningValues = sourceDataView.ToTable(true, partitioningColumns.ToArray());
+            sourceDataView = null;
 
             List<DataTable> dataTables = new List<DataTable>();
 
@@ -115,6 +141,126 @@ namespace DataCrossJoin.Helper
                 dataTables.Add(dt);
             }
 
+            int debug_req_row_length = 0;
+
+            using (TextWriter writer = new StreamWriter(@"out.csv", false, Encoding.UTF8))
+            {
+                CsvWriter csvWriter = new CsvWriter(writer);
+
+                List<string> columnNames = new List<string>(sourceDataTable.Columns.Count);
+
+                foreach (DataColumn col in sourceDataTable.Columns)
+                {
+                    columnNames.Add(col.ColumnName);
+                }
+
+                if (putKeyColumnsInFront)
+                {
+                    outputTableRowFields(csvWriter, columnNames, keyColumnIndexes);
+                    debug_req_row_length += keyColumnIndexes.Count;
+                }
+
+                // Writes header row for output CSV
+                for (int i = 0; i < dataTables.Count; i += 1)
+                {
+                    outputTableRowFields(csvWriter, columnNames, columnsPerPartitionIndexes);
+                    debug_req_row_length += columnsPerPartitionIndexes.Count;
+                }
+
+                //csvWriter.WriteField(col.ColumnName);
+
+                csvWriter.NextRecord();
+
+                
+                for (int i = 0; i < dataTables.Count; i += 1)
+                {
+                    while (dataTables[i].Rows.Count != 0)
+                    {
+                        bool keyColumnsWritten = !putKeyColumnsInFront;
+                        List<string> outRow = new List<string>();
+
+                        // The data tables from 0 to i-1 are empty so write empty fields for them
+                        for (int k = 0; k < i; k += 1)
+                        {
+                            outRow.AddRange(Enumerable.Repeat("", columnsPerPartitionIndexes.Count));
+                        }
+
+                        //Find a table that has key columns set
+                        if (dataTables[i].Rows.Count == 0)
+                        {
+                            outRow.AddRange(Enumerable.Repeat("", columnsPerPartitionIndexes.Count));
+                            continue;
+                        }
+
+                        var row = dataTables[i].Rows[0];
+
+                        if (!keyColumnsWritten)
+                        {
+                            List<string> keyColumnValues = new List<string>(keyColumnIndexes.Count);
+                            foreach (int idx in keyColumnIndexes)
+                            {
+                                keyColumnValues.Add(row[idx].ToString());
+                            }
+                            outRow.InsertRange(0, keyColumnValues);
+
+                            keyColumnsWritten = true;
+                        }
+
+                        for (int k = 0; k < columnsPerPartitionIndexes.Count; k += 1)
+                        {
+                            outRow.Add(row[columnsPerPartitionIndexes[k]].ToString());
+                        }
+
+                        List<string> whereParts = new List<string>();
+                        int keyColumnIdx = 0;
+                        foreach (int idx in keyColumnIndexes)
+                        {
+                            whereParts.Add($"[{keyColumns[keyColumnIdx]}]='{row[idx]}'");
+                            keyColumnIdx += 1;
+                        }
+
+                        dataTables[i].Rows.Remove(row);
+
+                        string whereStr = string.Join(" AND ", whereParts);
+
+                        for (int j = i + 1; j < dataTables.Count; j += 1)
+                        {
+                            if (dataTables[j].Rows.Count == 0)
+                            {
+                                outRow.AddRange(Enumerable.Repeat("", columnsPerPartitionIndexes.Count));
+                                continue;
+                            }
+
+                            var rows = dataTables[j].Select(whereStr);
+                            if (rows.Length != 0)
+                            {
+                                for (int k = 0; k < columnsPerPartitionIndexes.Count; k += 1)
+                                {
+                                    outRow.Add(rows[0][columnsPerPartitionIndexes[k]].ToString());
+                                }
+
+                                dataTables[j].Rows.Remove(rows[0]);
+                            }
+                            else
+                            {
+                                outRow.AddRange(Enumerable.Repeat("", columnsPerPartitionIndexes.Count));
+                            }
+                        }
+
+                        if(debug_req_row_length != outRow.Count)
+                        {
+                            throw new Exception($"Unexpected output row length {outRow.Count}, expecting {debug_req_row_length}");
+                        }
+
+                        foreach (string field in outRow)
+                        {
+                            csvWriter.WriteField(field);
+                        }
+                        csvWriter.NextRecord();
+                    }
+                }
+            }
+            return;
             List<IEnumerator<DataRow>> dataTablesEnumerators = dataTables.Select(dt => dt.AsEnumerable().GetEnumerator()).ToList();
 
             /*foreach(var en in dataTablesEnumerators)
@@ -255,7 +401,7 @@ namespace DataCrossJoin.Helper
             {
                 CsvWriter csvWriter = new CsvWriter(writer);
 
-                Action<IEnumerable<string>, IEnumerable<int>> outputTableRowFields = (IEnumerable<string> rowArray, IEnumerable<int> columnIndexes) =>
+                Action<IEnumerable<string>, IEnumerable<int>> outputTableRowFields1 = (IEnumerable<string> rowArray, IEnumerable<int> columnIndexes) =>
                 {
                     var it = rowArray.GetEnumerator();
                     int itPos = 0;
@@ -288,13 +434,13 @@ namespace DataCrossJoin.Helper
 
                 if (putKeyColumnsInFront)
                 {
-                    outputTableRowFields(columnNames, keyColumnIndexes);
+                    outputTableRowFields1(columnNames, keyColumnIndexes);
                 }
 
                 // Writes header row for output CSV
                 for (int i = 0; i < dataTables.Count; i += 1)
                 {
-                    outputTableRowFields(columnNames, columnsPerPartitionIndexes);
+                    outputTableRowFields1(columnNames, columnsPerPartitionIndexes);
                 }
 
                 //csvWriter.WriteField(col.ColumnName);
@@ -390,7 +536,7 @@ namespace DataCrossJoin.Helper
                             if (i == minEnumeratorIndex)
                             {
                                 //append row data to result row
-                                outputTableRowFields(row1.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
+                                outputTableRowFields1(row1.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
 
                                 //advance enumerator
                                 movedNext = moveNext(dataTablesEnumerators[i]) || movedNext;
@@ -413,7 +559,7 @@ namespace DataCrossJoin.Helper
                                 if (equal)
                                 {
                                     //append row data to result row
-                                    outputTableRowFields(row1.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
+                                    outputTableRowFields1(row1.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
 
 
                                     //advance enumerator
