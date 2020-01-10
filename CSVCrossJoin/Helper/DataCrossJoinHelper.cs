@@ -114,28 +114,141 @@ namespace DataCrossJoin.Helper
 
                 dataTables.Add(dt);
             }
-            var en = dataTables[0].AsEnumerable().GetEnumerator();
-            //List<string> keyColumns = new List<string>() { "col1", "col2", "col3" };
 
-            List<DataView> dataViews = new List<DataView>();
-            string sortStr = string.Join(",", keyColumns);
+            List<IEnumerator<DataRow>> dataTablesEnumerators = dataTables.Select(dt => dt.AsEnumerable().GetEnumerator()).ToList();
 
-            foreach (DataTable dt in dataTables)
+            /*foreach(var en in dataTablesEnumerators)
             {
-                DataView dv = new DataView(dt);
-                dv.Sort = sortStr;
-                dataViews.Add(dv);
+                while (en.MoveNext())
+                {
+                    if (en.Current != null && en.Current["Kod stanowiska"].ToString().Contains("MpKrakBujaka-PM10-1g"))
+                    {
+                        var a = "abc";
+                        break;
+                    }
+                }
+            }*/
+
+            foreach (var en in dataTablesEnumerators)
+            {
+                en.MoveNext();
             }
 
-            List<System.Collections.IEnumerator> dataViewsEnumerators = dataViews.Select(dv => dv.GetEnumerator()).ToList();
-            
-            List<string> minKeyColumnVals = null;
             int minEnumeratorIndex = -1;
 
-            // Move enumerators to first entry
-            foreach (var enumerator in dataViewsEnumerators)
+            while (true)
             {
-                enumerator.MoveNext();
+                DataRow row = null;
+                List<string> minKeyColumnVals = null;
+
+                for (int i = 0; i < dataTablesEnumerators.Count; i += 1)
+                {
+                    if(dataTablesEnumerators[i] == null)
+                    {
+                        continue;
+                    }
+
+                    try
+
+                    {
+                        row = dataTablesEnumerators[i].Current;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        continue;
+                    }
+
+                    if (row["Kod stanowiska"].ToString().Contains("MpKrakBujaka-PM10-1g"))
+                    {
+                        var here = true;
+                    }
+
+                    for (int j = 0; j < keyColumns.Count; j += 1)
+                    {
+                        
+                        //NOTE: This assumes DataTable will sort the rows using the same method
+                        if (minKeyColumnVals == null || row[keyColumns[j]].ToString().CompareTo(minKeyColumnVals[j]) == -1)
+                        {
+                            minKeyColumnVals = keyColumns.Select(keyColumn => row[keyColumn].ToString()).ToList();
+                            minEnumeratorIndex = i;
+                            break;
+                        }
+                    }
+                }
+
+                var dr = dataTablesEnumerators[minEnumeratorIndex].Current;
+                if (dr != null && dr["Kod stanowiska"].ToString().Contains("MpKrakBujaka-PM10-1g"))
+                {
+                    var a = dr["Rok"];
+                }
+
+                for(int k=0; k < dataTablesEnumerators.Count; k += 1)
+                {
+                    IEnumerator<DataRow> en = dataTablesEnumerators[k];
+
+                    if (en == null)
+                    {
+                        continue;
+                    }
+
+                    int minColIdx = 0;
+                    bool equal = true;
+                    foreach (int idx in keyColumnIndexes)
+                    {
+                        if (en.Current[idx].ToString().CompareTo(minKeyColumnVals[minColIdx]) != 0)
+                        {
+                            equal = false;
+                            break;
+                        }
+                        minColIdx += 1;
+                    }
+
+                    if (equal)
+                    {
+                        if (en.Current["Kod stanowiska"].ToString().Contains("MpKrakBujaka-PM10-1g"))
+                        {
+                            var a = dr["Rok"];
+                        }
+                        var moved1 = en.MoveNext();
+                        if (!moved1)
+                        {
+                            dataTablesEnumerators[k] = null;
+                        }
+                    }
+                }
+
+                if (dataTablesEnumerators[minEnumeratorIndex] != null)
+                {
+                    if (dataTablesEnumerators[minEnumeratorIndex].Current["Kod stanowiska"].ToString().Contains("MpKrakBujaka-PM10-1g"))
+                    {
+                        var a = dr["Rok"];
+                    }
+                    var moved = dataTablesEnumerators[minEnumeratorIndex].MoveNext();
+                    if (!moved)
+                    {
+                        dataTablesEnumerators[minEnumeratorIndex] = null;
+                    }
+                }
+            }
+
+            return;
+            
+            List<string> minKeyColumnVals1 = null;
+            minEnumeratorIndex = -1;
+
+            Func<IEnumerator<DataRow>, bool> moveNext = (IEnumerator<DataRow> en) =>
+            {
+                if (en.Current != null && en.Current["Kod stanowiska"].ToString().Contains("MpKrakBujaka-PM10-1g"))
+                {
+                    var a = "abc";
+                }
+                return en.MoveNext();
+            };
+
+            // Move enumerators to first entry
+            foreach (var enumerator in dataTablesEnumerators)
+            {
+                moveNext(enumerator);
             }
 
             using (TextWriter writer = new StreamWriter(@"out.csv", false, Encoding.UTF8))
@@ -179,7 +292,7 @@ namespace DataCrossJoin.Helper
                 }
 
                 // Writes header row for output CSV
-                for (int i = 0; i < dataViews.Count; i += 1)
+                for (int i = 0; i < dataTables.Count; i += 1)
                 {
                     outputTableRowFields(columnNames, columnsPerPartitionIndexes);
                 }
@@ -187,6 +300,8 @@ namespace DataCrossJoin.Helper
                 //csvWriter.WriteField(col.ColumnName);
 
                 csvWriter.NextRecord();
+
+                
 
                 // The rest of the code depends on source data table containg some data rows (output column header was handled above)
                 if (sourceDataTable.Rows.Count != 0)
@@ -199,21 +314,21 @@ namespace DataCrossJoin.Helper
                         movedNext = false;
 
                         // Look for "minimum" key column combination
-                        for (int i = 0; i < dataViewsEnumerators.Count; i += 1)
+                        for (int i = 0; i < dataTablesEnumerators.Count; i += 1)
                         {
                             //FIXME: THIS CAN THROW IF MoveNext moved the Current past the last element.
-                            DataRowView row = null;
+                            DataRow row = null;
                             try
                             {
-                                row = (DataRowView)dataViewsEnumerators[i].Current;
+                                row = dataTablesEnumerators[i].Current;
 
                                 if (row["Kod stanowiska"].ToString() == "MpKrakBujaka-PM10-1g")
                                 {
                                     string a = "abc";
 
-                                    for (int j = 0; j < dataViews.Count; j += 1)
+                                    for (int j = 0; j < dataTables.Count; j += 1)
                                     {
-                                           var row1 = dataViews[j].Table.Select("[Kod stanowiska] = 'MpKrakBujaka-PM10-1g'");
+                                           var row1 = dataTables[j].Select("[Kod stanowiska] = 'MpKrakBujaka-PM10-1g'");
                                     }
                                 }
                             }
@@ -222,13 +337,24 @@ namespace DataCrossJoin.Helper
                                 continue;
                             }
 
+                            /*if(minKeyColumnVals != null && minKeyColumnVals[7] == )
+                            {
+                                while(dataTablesEnumerators[i].Current["Kod stanowiska"] != "MpKrakBujaka-PM10-1g"){
+                                    if (!dataTablesEnumerators[i].MoveNext())
+                                    {
+                                        var dupa = "not found";
+                                    }
+                                }
+                                string a = "abc";
+                            }*/
+
                             // Compare the row's key columns with local minimum
                             for (int j = 0; j < keyColumns.Count; j += 1)
                             {
                                 //NOTE: This assumes DataTable will sort the rows using the same method
-                                if (minKeyColumnVals == null || row[keyColumns[j]].ToString().CompareTo(minKeyColumnVals[j]) == -1)
+                                if (minKeyColumnVals1 == null || row[keyColumns[j]].ToString().CompareTo(minKeyColumnVals1[j]) == -1)
                                 {
-                                    minKeyColumnVals = keyColumns.Select(keyColumn => row[keyColumn].ToString()).ToList();
+                                    minKeyColumnVals1 = keyColumns.Select(keyColumn => row[keyColumn].ToString()).ToList();
                                     minEnumeratorIndex = i;
                                     break;
                                 }
@@ -238,20 +364,20 @@ namespace DataCrossJoin.Helper
                         // Write out the "minimum" key column combination first if key columns are to be put in front
                         if (putKeyColumnsInFront)
                         {
-                            foreach (string fieldVal in minKeyColumnVals)
+                            foreach (string fieldVal in minKeyColumnVals1)
                             {
                                 csvWriter.WriteField(fieldVal);
                             }
                         }
 
                         // Write all the rows with key colums equal to the found min values
-                        for (int i = 0; i < dataViewsEnumerators.Count; i += 1)
+                        for (int i = 0; i < dataTablesEnumerators.Count; i += 1)
                         {
                             //Get the row that the current enumerator points to
-                            DataRowView rowView = null;
+                            DataRow row1 = null;
                             try
                             {
-                                rowView = (DataRowView)dataViewsEnumerators[i].Current;
+                                row1 = dataTablesEnumerators[i].Current;
                             }
                             catch (InvalidOperationException)
                             {
@@ -264,10 +390,10 @@ namespace DataCrossJoin.Helper
                             if (i == minEnumeratorIndex)
                             {
                                 //append row data to result row
-                                outputTableRowFields(rowView.Row.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
+                                outputTableRowFields(row1.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
 
                                 //advance enumerator
-                                movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
+                                movedNext = moveNext(dataTablesEnumerators[i]) || movedNext;
                             }
                             else
                             {
@@ -276,7 +402,7 @@ namespace DataCrossJoin.Helper
                                 for (int j = 0; j < keyColumns.Count; j += 1)
                                 {
                                     //NOTE: This assumes DataTable will sort the rows using the same method
-                                    if (rowView[keyColumns[j]].ToString().CompareTo(minKeyColumnVals[j]) != 0)
+                                    if (row1[keyColumns[j]].ToString().CompareTo(minKeyColumnVals1[j]) != 0)
                                     {
                                         //found value that is not equal;
                                         equal = false;
@@ -287,11 +413,11 @@ namespace DataCrossJoin.Helper
                                 if (equal)
                                 {
                                     //append row data to result row
-                                    outputTableRowFields(rowView.Row.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
+                                    outputTableRowFields(row1.ItemArray.Select(val => val.ToString()), columnsPerPartitionIndexes);
 
 
                                     //advance enumerator
-                                    movedNext = dataViewsEnumerators[i].MoveNext() || movedNext;
+                                    movedNext = moveNext(dataTablesEnumerators[i]) || movedNext;
                                 }
                                 else
                                 {
